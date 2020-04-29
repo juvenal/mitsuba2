@@ -533,19 +533,19 @@ MTS_VARIANT std::tuple<Float, Float, Float> Mesh<Float, Spectrum>::barycentric_c
             p2 = vertex_position(fi[2], active);
 
     Vector3f rel = si.p - p0,
-            du  = p1 - p0,
-            dv  = p2 - p0;
+             du  = p1 - p0,
+             dv  = p2 - p0;
 
     /* Solve a least squares problem to determine
     the UV coordinates within the current triangle */
     Float b1  = dot(du, rel), b2 = dot(dv, rel),
-        a11 = dot(du, du), a12 = dot(du, dv),
-        a22 = dot(dv, dv),
-        inv_det = rcp(a11 * a22 - a12 * a12);
+          a11 = dot(du, du), a12 = dot(du, dv),
+          a22 = dot(dv, dv),
+          inv_det = rcp(a11 * a22 - a12 * a12);
 
     Float u = fmsub (a22, b1, a12 * b2) * inv_det,
-        v = fnmadd(a12, b1, a11 * b2) * inv_det,
-        w = 1.f - u - v;
+          v = fnmadd(a12, b1, a11 * b2) * inv_det,
+          w = 1.f - u - v;
 
     return {w, u, v};
 }

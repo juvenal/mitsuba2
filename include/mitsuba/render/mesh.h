@@ -2,6 +2,7 @@
 
 #include <mitsuba/render/interaction.h>
 #include <mitsuba/render/shape.h>
+#include <mitsuba/render/srgb.h>
 #include <mitsuba/core/struct.h>
 #include <mitsuba/core/transform.h>
 #include <mitsuba/core/distr_1d.h>
@@ -155,35 +156,45 @@ public:
     virtual std::pair<Vector3f, Vector3f>
     normal_derivative(const SurfaceInteraction3f &si,
                       bool shading_frame = true, Mask active = true) const override;
+    
+    virtual UnpolarizedSpectrum eval_attribute(const std::string& name, const SurfaceInteraction3f &si, Mask active = true) const override {
+        const auto& attribute = m_mesh_attributes.find(name);
+        if (attribute == m_mesh_attributes.end())
+            Throw("Invalid attribute requested %s.", name.c_str());
 
-    virtual Float eval_vertex_attribute_1(const std::string& name, const SurfaceInteraction3f &si, Mask active = true) const override {
-        const auto& attribute = m_mesh_attributes.find({ name, MeshAttributeType::VERTEX, 1 });
-        if (attribute == m_mesh_attributes.end())
-            Throw("Invalid vertex attribute requested %s<1>.", name.c_str());
-        
-        return eval_vertex_attribute_impl<1>(attribute->second, si, active).x();
-    }
-    virtual Color3f eval_vertex_attribute_3(const std::string& name, const SurfaceInteraction3f &si, Mask active = true) const override {
-        const auto& attribute = m_mesh_attributes.find({ name, MeshAttributeType::VERTEX, 3 });
-        if (attribute == m_mesh_attributes.end())
-            Throw("Invalid vertex attribute requested %s<3>.", name.c_str());
-        
-        return eval_vertex_attribute_impl<3>(attribute->second, si, active);
+        if (attribute->second.size == 1)
+            return interpolate_attribute<1>(attribute->second.type, attribute->second.buf, si, active);
+        else if (attribute->second.size == 3) {
+            auto result = interpolate_attribute<3>(attribute->second.type, attribute->second.buf, si, active);
+            
+            if constexpr (is_monochromatic_v<Spectrum>)
+                return luminance(result);
+            else
+                return result;
+        } else
+            Throw("eval_attribute(): Attribute \"%s\" requested but had size %u.", name, attribute->second.size);
     }
 
-    virtual Float eval_face_attribute_1(const std::string& name, const SurfaceInteraction3f &si, Mask active = true) const override {
-        const auto& attribute = m_mesh_attributes.find({ name, MeshAttributeType::FACE, 1 });
+    virtual Float eval_attribute_1(const std::string& name, const SurfaceInteraction3f &si, Mask active = true) const override {
+        const auto& attribute = m_mesh_attributes.find(name);
         if (attribute == m_mesh_attributes.end())
-            Throw("Invalid face attribute requested %s<1>.", name.c_str());
-        
-        return eval_face_attribute_impl<1>(attribute->second, si, active).x();
+            Throw("Invalid attribute requested %s.", name.c_str());
+
+        if (attribute->second.size == 1)
+            return interpolate_attribute<1>(attribute->second.type, attribute->second.buf, si, active);
+        else
+            Throw("eval_attribute_1(): Attribute \"%s\" requested but had size %u.", name, attribute->second.size);
     }
-    virtual Color3f eval_face_attribute_3(const std::string& name, const SurfaceInteraction3f &si, Mask active = true) const override {
-        const auto& attribute = m_mesh_attributes.find({ name, MeshAttributeType::FACE, 3 });
+
+    virtual Color3f eval_attribute_3(const std::string& name, const SurfaceInteraction3f &si, Mask active = true) const override {
+        const auto& attribute = m_mesh_attributes.find(name);
         if (attribute == m_mesh_attributes.end())
-            Throw("Invalid face attribute requested %s<3>.", name.c_str());
-        
-        return eval_face_attribute_impl<3>(attribute->second, si, active);
+            Throw("Invalid attribute requested %s.", name.c_str());
+
+        else if (attribute->second.size == 3) {
+            return interpolate_attribute<3>(attribute->second.type, attribute->second.buf, si, active);
+        } else
+            Throw("eval_attribute_3(): Attribute \"%s\" requested but had size %u.", name, attribute->second.size);
     }
 
     /** \brief Ray-triangle intersection test
@@ -253,29 +264,6 @@ public:
     /// Return a human-readable string representation of the shape contents.
     virtual std::string to_string() const override;
 
-private:
-
-    template<uint32_t Size>
-    auto eval_vertex_attribute_impl(const DynamicBuffer<Float> &buf, const SurfaceInteraction3f& si, Mask active = true) const {
-        using Result = Vector<replace_scalar_t<Mask, float>, Size>;
-
-        auto fi = face_indices(si.prim_index, active);
-        auto[b0, b1, b2] = barycentric_coordinates(si, active);
-
-        Result attrs[3] = { gather<Result>(buf, fi[0], active),
-                            gather<Result>(buf, fi[1], active),
-                            gather<Result>(buf, fi[2], active) };
-        Result attr = b0 * attrs[0] + b1 * attrs[1] + b2 * attrs[2];
-
-        return attr;
-    }
-
-    template<uint32_t Size>
-    auto eval_face_attribute_impl(const DynamicBuffer<Float> &buf, const SurfaceInteraction3f& si, Mask active = true) const {
-        using Result = Vector<replace_scalar_t<Mask, float>, Size>;
-        return gather<Result>(buf, si.prim_index, active);
-    }
-
 protected:
     Mesh(const Properties &);
     inline Mesh() { m_mesh = true; }
@@ -302,21 +290,45 @@ protected:
         VERTEX, FACE
     };
     struct MeshAttribute {
-        std::string name;
-        MeshAttributeType type;
         size_t size;
-        
-        bool operator==(const MeshAttribute &other) const {
-            return name == other.name && type == other.type && size == other.size;
-        }
+        MeshAttributeType type;
+        DynamicBuffer<Float> buf;
     };
-    struct MeshAttributeHasher {
-        std::size_t operator()(const MeshAttribute& attr) const {
-            return ((std::hash<std::string>()(attr.name) ^
-                    (std::hash<int>()((int)attr.type) << 1)) >> 1) ^
-                    (std::hash<size_t>()(attr.size) << 1);
+
+    template<uint32_t Size>
+    auto interpolate_attribute(MeshAttributeType type, const DynamicBuffer<Float> &buf, const SurfaceInteraction3f& si, Mask active) const {
+        using StorageType = std::conditional_t<Size == 1, Float, Color3f>;
+
+        if (type == MeshAttributeType::VERTEX) {
+            auto fi = face_indices(si.prim_index, active);
+            auto[b0, b1, b2] = barycentric_coordinates(si, active);
+
+            StorageType v0 = gather<StorageType>(buf, fi[0], active),
+                        v1 = gather<StorageType>(buf, fi[1], active),
+                        v2 = gather<StorageType>(buf, fi[2], active);
+
+            // Barycentric interpolation
+            if constexpr (is_spectral_v<Spectrum> && Size == 3) {
+                // Evaluate spectral upsampling model from stored coefficients
+                UnpolarizedSpectrum c0, c1, c2;
+
+                c0 = srgb_model_eval<UnpolarizedSpectrum>(v0, si.wavelengths);
+                c1 = srgb_model_eval<UnpolarizedSpectrum>(v1, si.wavelengths);
+                c2 = srgb_model_eval<UnpolarizedSpectrum>(v2, si.wavelengths);
+
+                return fmadd(c0, b0, fmadd(c1, b1, c2 * b2));
+            } else {
+                return fmadd(v0, b0, fmadd(v1, b1, v2 * b2));
+            }
+        } else {
+            StorageType v = gather<StorageType>(buf, si.prim_index, active);
+
+            if constexpr (is_spectral_v<Spectrum> && Size == 3)
+                return srgb_model_eval<UnpolarizedSpectrum>(v, si.wavelengths);
+            else
+                return v;
         }
-    };
+    }
 
 protected:
     std::string m_name;
@@ -332,7 +344,7 @@ protected:
 
     DynamicBuffer<UInt32> m_faces_buf;
 
-    std::unordered_map<MeshAttribute, DynamicBuffer<Float>, MeshAttributeHasher> m_mesh_attributes;
+    std::unordered_map<std::string, MeshAttribute> m_mesh_attributes;
 
     // END NEW DESIGN
 

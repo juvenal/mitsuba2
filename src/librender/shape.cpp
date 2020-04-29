@@ -306,6 +306,23 @@ Shape<Float, Spectrum>::normal_derivative(const SurfaceInteraction3f & /*si*/,
     NotImplementedError("normal_derivative");
 }
 
+MTS_VARIANT typename Shape<Float, Spectrum>::UnpolarizedSpectrum
+Shape<Float, Spectrum>::eval_attribute(const std::string& /*name*/,
+                                       const SurfaceInteraction3f &/*si*/, Mask /*active*/) const {
+    NotImplementedError("eval_attribute");
+}
+
+MTS_VARIANT Float
+Shape<Float, Spectrum>::eval_attribute_1(const std::string& /*name*/,
+                                         const SurfaceInteraction3f &/*si*/, Mask /*active*/) const {
+    NotImplementedError("eval_attribute_1");
+}
+MTS_VARIANT typename Shape<Float, Spectrum>::Color3f
+Shape<Float, Spectrum>::eval_attribute_3(const std::string& /*name*/,
+                                         const SurfaceInteraction3f &/*si*/, Mask /*active*/) const {
+    NotImplementedError("eval_attribute_3");
+}
+
 MTS_VARIANT typename Shape<Float, Spectrum>::ScalarFloat
 Shape<Float, Spectrum>::surface_area() const {
     NotImplementedError("surface_area");

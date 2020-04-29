@@ -83,6 +83,12 @@ public:
         std::vector<PLYElement> elements;
     };
 
+    struct PLYAttributeDescriptor {
+        std::string name;
+        size_t size;
+        InputFloat* buf_ptr;
+    };
+
     PLYMesh(const Properties &props) : Base(props) {
         /// Process vertex/index records in large batches
         constexpr size_t elements_per_packet = 1024;
@@ -158,8 +164,8 @@ public:
 
                 // Look for other fields
                 std::unordered_set<std::string> reserved_names = { "x", "y", "z", "nx", "ny", "nz", "u", "v" };
-                std::vector<std::tuple<std::string, size_t, InputFloat*>> vertex_attributes_descriptors;
-                find_other_fields(vertex_attributes_descriptors, vertex_struct, el.struct_, reserved_names);
+                std::vector<PLYAttributeDescriptor> vertex_attributes_descriptors;
+                find_other_fields("vertex_", vertex_attributes_descriptors, vertex_struct, el.struct_, reserved_names);
 
                 size_t i_struct_size = el.struct_->size();
                 size_t o_struct_size = vertex_struct->size();
@@ -178,16 +184,12 @@ public:
                 if (has_vertex_texcoords)
                     m_vertex_texcoords_buf = empty<FloatStorage>(m_vertex_count * 2);
 
-                // for (auto& [name, size, buf_ptr]: vertex_attributes_descriptors) {
-                //     MeshAttribute attr = { name, Mesh<Float, Spectrum>::MeshAttributeType::VERTEX, size };
-                //     m_mesh_attributes[attr] = empty<FloatStorage>(m_vertex_count * size);
-                //     m_mesh_attributes[attr].buf.managed();
-                //     buf_ptr = m_mesh_attributes[attr].buf.data();
-                // }
-                for (auto& [name, size, buf_ptr]: vertex_attributes_descriptors) {
-                    auto[it, success] = m_mesh_attributes.insert({{ name, Mesh<Float, Spectrum>::MeshAttributeType::VERTEX, size }, empty<FloatStorage>(m_vertex_count * size)});
-                    it->second.managed();
-                    buf_ptr = it->second.data();
+                for (auto& descr: vertex_attributes_descriptors) {
+                    auto[it, success] = m_mesh_attributes.insert({
+                        descr.name, { descr.size, Mesh<Float, Spectrum>::MeshAttributeType::VERTEX, empty<FloatStorage>(m_vertex_count * descr.size)}
+                    });
+                    it->second.buf.managed();
+                    descr.buf_ptr = it->second.buf.data();
                 }
 
                 m_vertex_positions_buf.managed();
@@ -242,13 +244,12 @@ public:
                             texcoord_ptr += 2;
                         }
 
-                        size_t target_offset = sizeof(InputFloat) * (!m_disable_vertex_normals ? has_vertex_texcoords ? 8 : 6 : 3);
-
+                        size_t target_offset = sizeof(InputFloat) * (!m_disable_vertex_normals ? (has_vertex_texcoords ? 8 : 6) : (has_vertex_texcoords ? 5 : 3));
                         for (size_t k = 0; k < vertex_attributes_descriptors.size(); ++k) {
-                            auto& [name, size, buf_ptr] = vertex_attributes_descriptors[k];
-                            memcpy(buf_ptr, target + target_offset, size * sizeof(InputFloat));
-                            buf_ptr += size;
-                            target_offset += size * sizeof(InputFloat);
+                            auto& descr = vertex_attributes_descriptors[k];
+                            memcpy(descr.buf_ptr, target + target_offset, descr.size * sizeof(InputFloat));
+                            descr.buf_ptr += descr.size;
+                            target_offset += descr.size * sizeof(InputFloat);
                         }
 
                         target += o_struct_size;
@@ -268,8 +269,8 @@ public:
 
                 // Look for other fields
                 std::unordered_set<std::string> reserved_names = { "vertex_index.count", "vertex_indices.count", "i0", "i1", "i2" };
-                std::vector<std::tuple<std::string, size_t, InputFloat*>> face_attributes_descriptors;
-                find_other_fields(face_attributes_descriptors, face_struct, el.struct_, reserved_names);
+                std::vector<PLYAttributeDescriptor> face_attributes_descriptors;
+                find_other_fields("face_", face_attributes_descriptors, face_struct, el.struct_, reserved_names);
 
                 size_t i_struct_size = el.struct_->size();
                 size_t o_struct_size = face_struct->size();
@@ -285,10 +286,12 @@ public:
                 m_faces_buf = empty<DynamicBuffer<UInt32>>(m_face_count * 3);
                 m_faces_buf.managed();
 
-                for (auto& [name, size, buf_ptr]: face_attributes_descriptors) {
-                    auto[it, success] = m_mesh_attributes.insert({{ name, Mesh<Float, Spectrum>::MeshAttributeType::FACE, size }, empty<FloatStorage>(m_face_count * size)});
-                    it->second.managed();
-                    buf_ptr = it->second.data();
+                for (auto& descr: face_attributes_descriptors) {
+                    auto[it, success] = m_mesh_attributes.insert({
+                        descr.name, { descr.size, Mesh<Float, Spectrum>::MeshAttributeType::FACE, empty<FloatStorage>(m_face_count * descr.size)}
+                    });
+                    it->second.buf.managed();
+                    descr.buf_ptr = it->second.buf.data();
                 }
 
                 ScalarIndex* face_ptr = m_faces_buf.data();
@@ -318,10 +321,10 @@ public:
 
                         size_t target_offset = sizeof(InputFloat) * 3;
                         for (size_t k = 0; k < face_attributes_descriptors.size(); ++k) {
-                            auto& [name, size, buf_ptr] = face_attributes_descriptors[k];
-                            memcpy(buf_ptr, target + target_offset, size * sizeof(InputFloat));
-                            buf_ptr += size;
-                            target_offset += size * sizeof(InputFloat);
+                            auto& descr = face_attributes_descriptors[k];
+                            memcpy(descr.buf_ptr, target + target_offset, descr.size * sizeof(InputFloat));
+                            descr.buf_ptr += descr.size;
+                            target_offset += descr.size * sizeof(InputFloat);
                         }
 
                         target += o_struct_size;
@@ -595,17 +598,17 @@ private:
         return out;
     }
 
-    void find_other_fields(std::vector<std::tuple<std::string, size_t, InputFloat*>> &vertex_attributes_descriptors, ref<Struct> target_struct,
+    void find_other_fields(const std::string& type, std::vector<PLYAttributeDescriptor> &vertex_attributes_descriptors, ref<Struct> target_struct,
         ref<Struct> ref_struct, std::unordered_set<std::string> &reserved_names) {
 
         if (ref_struct->has_field("r") && ref_struct->has_field("g") && ref_struct->has_field("b")) {
             /* all good */
         } else if (ref_struct->has_field("red") &&
-                    ref_struct->has_field("green") &&
-                    ref_struct->has_field("blue")) {
-            ref_struct->field("red").name = "r";
+                   ref_struct->has_field("green") &&
+                   ref_struct->has_field("blue")) {
+            ref_struct->field("red").name   = "r";
             ref_struct->field("green").name = "g";
-            ref_struct->field("blue").name = "b";
+            ref_struct->field("blue").name  = "b";
             if (ref_struct->has_field("alpha"))
                 ref_struct->field("alpha").name = "a";
         }
@@ -618,7 +621,7 @@ private:
                 target_struct->append("a", struct_type_v<InputFloat>);
                 ++field_count;
             }
-            vertex_attributes_descriptors.push_back({"color", field_count, nullptr});
+            vertex_attributes_descriptors.push_back({ type + "color", field_count, nullptr });
         }
 
         reserved_names.insert({ "r", "g", "b", "a" });
@@ -651,7 +654,7 @@ private:
         auto flush_attribute = [&]() {
             for(size_t i = 0; i < current_postfix_level_index; ++i)
                 target_struct->append(current_prefix + "_" + postfixes[i][current_postfix_index], struct_type_v<InputFloat>);
-            vertex_attributes_descriptors.push_back({current_prefix, current_postfix_level_index, nullptr});
+            vertex_attributes_descriptors.push_back({ type + current_prefix, current_postfix_level_index, nullptr });
             prefixes_encountered.insert(current_prefix);
             // Reset state
             ignore_attribute();
