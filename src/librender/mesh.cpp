@@ -860,7 +860,13 @@ MTS_VARIANT std::string Mesh<Float, Spectrum>::to_string() const {
         << "  face_count = " << m_face_count << "," << std::endl
         << "  faces = [" << util::mem_string(face_data_bytes() * m_face_count) << " of face data]," << std::endl
         << "  disable_vertex_normals = " << m_disable_vertex_normals << "," << std::endl
-        << "  surface_area = " << m_area_distr.sum() << std::endl
+        << "  surface_area = " << m_area_distr.sum() << std::endl;
+
+    oss << "  mesh attributes = [" << std::endl;
+    size_t i = 0;
+    for(const auto&[name, attribute]: m_mesh_attributes)
+        oss << "    " << name << ": " << attribute.size << " floats" << (i++ == m_mesh_attributes.size()-1 ? "" : ",") << std::endl;
+    oss << "  ]" << std::endl
         << "]";
     return oss.str();
 }
