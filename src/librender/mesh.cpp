@@ -245,7 +245,9 @@ MTS_VARIANT Mesh<Float, Spectrum>::Mesh(
     if (has_uvs)
         m_vertex_texcoords_buf = FloatStorage::copy(tmp_uvs.data(), m_vertex_count * 2);
     if (has_cols)
-        m_mesh_attributes["vertex_color"] = { 3, VERTEX, FloatStorage::copy(tmp_cols.data(), m_vertex_count * 3) };
+        m_mesh_attributes["vertex_color"] = {
+            3, VERTEX, FloatStorage::copy(tmp_cols.data(), m_vertex_count * 3)
+        };
 
     m_faces_buf.managed();
     m_vertex_positions_buf.managed();
@@ -695,47 +697,56 @@ Mesh<Float, Spectrum>::normal_derivative(const SurfaceInteraction3f &si, bool sh
 }
 
 MTS_VARIANT typename Mesh<Float, Spectrum>::UnpolarizedSpectrum
-Mesh<Float, Spectrum>::eval_attribute(const std::string& name, const SurfaceInteraction3f &si, Mask active) const {
-    const auto& attribute = m_mesh_attributes.find(name);
-    if (attribute == m_mesh_attributes.end())
+Mesh<Float, Spectrum>::eval_attribute(const std::string& name,
+                                      const SurfaceInteraction3f &si,
+                                      Mask active) const {
+    const auto& it = m_mesh_attributes.find(name);
+    if (it == m_mesh_attributes.end())
         Throw("Invalid attribute requested %s.", name.c_str());
 
-    if (attribute->second.size == 1)
-        return interpolate_attribute<1>(attribute->second.type, attribute->second.buf, si, active);
-    else if (attribute->second.size == 3) {
-        auto result = interpolate_attribute<3>(attribute->second.type, attribute->second.buf, si, active);
-        
+    const auto& attr = it->second;
+    if (attr.size == 1)
+        return interpolate_attribute<1>(attr.type, attr.buf, si, active);
+    else if (attr.size == 3) {
+        auto result = interpolate_attribute<3>(attr.type, attr.buf, si, active);
+
         if constexpr (is_monochromatic_v<Spectrum>)
             return luminance(result);
         else
             return result;
     } else {
-        Throw("eval_attribute(): Attribute \"%s\" requested but had size %u.", name, attribute->second.size);
+        Throw("eval_attribute(): Attribute \"%s\" requested but had size %u.", name, attr.size);
     }
 }
 
 MTS_VARIANT Float
-Mesh<Float, Spectrum>::eval_attribute_1(const std::string& name, const SurfaceInteraction3f &si, Mask active) const {
-    const auto& attribute = m_mesh_attributes.find(name);
-    if (attribute == m_mesh_attributes.end())
+Mesh<Float, Spectrum>::eval_attribute_1(const std::string& name,
+                                        const SurfaceInteraction3f &si,
+                                        Mask active) const {
+    const auto& it = m_mesh_attributes.find(name);
+    if (it == m_mesh_attributes.end())
         Throw("Invalid attribute requested %s.", name.c_str());
 
-    if (attribute->second.size == 1)
-        return interpolate_attribute<1>(attribute->second.type, attribute->second.buf, si, active);
+    const auto& attr = it->second;
+    if (attr.size == 1)
+        return interpolate_attribute<1>(attr.type, attr.buf, si, active);
     else
-        Throw("eval_attribute_1(): Attribute \"%s\" requested but had size %u.", name, attribute->second.size);
+        Throw("eval_attribute_1(): Attribute \"%s\" requested but had size %u.", name, attr.size);
 }
 
 MTS_VARIANT typename Mesh<Float, Spectrum>::Color3f
-Mesh<Float, Spectrum>::eval_attribute_3(const std::string& name, const SurfaceInteraction3f &si, Mask active) const {
-    const auto& attribute = m_mesh_attributes.find(name);
-    if (attribute == m_mesh_attributes.end())
+Mesh<Float, Spectrum>::eval_attribute_3(const std::string& name,
+                                        const SurfaceInteraction3f &si,
+                                        Mask active) const {
+    const auto& it = m_mesh_attributes.find(name);
+    if (it == m_mesh_attributes.end())
         Throw("Invalid attribute requested %s.", name.c_str());
 
-    else if (attribute->second.size == 3) {
-        return interpolate_attribute<3>(attribute->second.type, attribute->second.buf, si, active);
+    const auto& attr = it->second;
+    if (attr.size == 3) {
+        return interpolate_attribute<3>(attr.type, attr.buf, si, active);
     } else
-        Throw("eval_attribute_3(): Attribute \"%s\" requested but had size %u.", name, attribute->second.size);
+        Throw("eval_attribute_3(): Attribute \"%s\" requested but had size %u.", name, attr.size);
 }
 
 namespace {
@@ -861,7 +872,7 @@ MTS_VARIANT size_t Mesh<Float, Spectrum>::vertex_data_bytes() const {
         vertex_data_bytes += 3 * sizeof(InputFloat);
     if (has_vertex_texcoords())
         vertex_data_bytes += 2 * sizeof(InputFloat);
-    
+
     for (const auto&[name, attribute]: m_mesh_attributes)
         if (attribute.type == VERTEX)
             vertex_data_bytes += attribute.size * sizeof(InputFloat);
@@ -875,7 +886,7 @@ MTS_VARIANT size_t Mesh<Float, Spectrum>::face_data_bytes() const {
     for (const auto&[name, attribute]: m_mesh_attributes)
         if (attribute.type == FACE)
             face_data_bytes += attribute.size * sizeof(InputFloat);
-    
+
     return face_data_bytes;
 }
 

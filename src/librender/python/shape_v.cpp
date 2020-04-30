@@ -64,18 +64,18 @@ MTS_PY_EXPORT(Shape) {
         .def("write_ply", &Mesh::write_ply, "stream"_a, "Export mesh as a binary PLY file")
         .def("vertex_positions_buffer",
              py::overload_cast<>(&Mesh::vertex_positions_buffer),
-             /*D(Mesh, vertex_positions_buffer),*/ py::return_value_policy::reference_internal)
+             D(Mesh, vertex_positions_buffer), py::return_value_policy::reference_internal)
         .def("vertex_normals_buffer",
              py::overload_cast<>(&Mesh::vertex_normals_buffer),
-             /*D(Mesh, vertex_normals_buffer),*/ py::return_value_policy::reference_internal)
+             D(Mesh, vertex_normals_buffer), py::return_value_policy::reference_internal)
         .def("vertex_texcoords_buffer",
              py::overload_cast<>(&Mesh::vertex_texcoords_buffer),
-             /*D(Mesh, vertex_texcoords_buffer),*/ py::return_value_policy::reference_internal)
+             D(Mesh, vertex_texcoords_buffer), py::return_value_policy::reference_internal)
         .def("faces_buffer",
              py::overload_cast<>(&Mesh::faces_buffer),
-             /*D(Mesh, faces_buffer),*/ py::return_value_policy::reference_internal)
+             D(Mesh, faces_buffer), py::return_value_policy::reference_internal)
         .def("attribute_buffer", &Mesh::attribute_buffer, "name"_a,
-             /*D(Mesh, attribute_buffer),*/ py::return_value_policy::reference_internal)
+             D(Mesh, attribute_buffer), py::return_value_policy::reference_internal)
         .def("ray_intersect_triangle", vectorize(&Mesh::ray_intersect_triangle),
              "index"_a, "ray"_a, "active"_a = true, D(Mesh, ray_intersect_triangle));
 }

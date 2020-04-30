@@ -247,9 +247,15 @@ public:
                                                             bool shading_frame = true,
                                                             Mask active        = true) const;
 
-    virtual UnpolarizedSpectrum eval_attribute(const std::string& /*name*/, const SurfaceInteraction3f &/*si*/, Mask /*active*/ = true) const;
-    virtual Float eval_attribute_1(const std::string& /*name*/, const SurfaceInteraction3f &/*si*/, Mask /*active*/ = true) const;
-    virtual Color3f eval_attribute_3(const std::string& /*name*/, const SurfaceInteraction3f &/*si*/, Mask /*active*/ = true) const;
+    virtual UnpolarizedSpectrum eval_attribute(const std::string &name,
+                                               const SurfaceInteraction3f &si,
+                                               Mask active = true) const;
+    virtual Float eval_attribute_1(const std::string &name,
+                                   const SurfaceInteraction3f &si,
+                                   Mask active = true) const;
+    virtual Color3f eval_attribute_3(const std::string &name,
+                                     const SurfaceInteraction3f &si,
+                                     Mask active = true) const;
 
     //! @}
     // =============================================================

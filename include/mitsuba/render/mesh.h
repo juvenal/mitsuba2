@@ -154,7 +154,9 @@ public:
 
     virtual Float pdf_position(const PositionSample3f &ps, Mask active = true) const override;
 
-    virtual std::tuple<Float, Float, Float> barycentric_coordinates(const SurfaceInteraction3f &si, Mask active = true) const;
+    virtual std::tuple<Float, Float, Float>
+    barycentric_coordinates(const SurfaceInteraction3f &si,
+                            Mask active = true) const;
 
     virtual void fill_surface_interaction(const Ray3f &ray,
                                           const Float *cache,
@@ -164,10 +166,16 @@ public:
     virtual std::pair<Vector3f, Vector3f>
     normal_derivative(const SurfaceInteraction3f &si,
                       bool shading_frame = true, Mask active = true) const override;
-    
-    virtual UnpolarizedSpectrum eval_attribute  (const std::string& name, const SurfaceInteraction3f &si, Mask active = true) const override;
-    virtual Float               eval_attribute_1(const std::string& name, const SurfaceInteraction3f &si, Mask active = true) const override;
-    virtual Color3f             eval_attribute_3(const std::string& name, const SurfaceInteraction3f &si, Mask active = true) const override;
+
+    virtual UnpolarizedSpectrum eval_attribute(const std::string &name,
+                                               const SurfaceInteraction3f &si,
+                                               Mask active = true) const override;
+    virtual Float eval_attribute_1(const std::string& name,
+                                   const SurfaceInteraction3f &si,
+                                   Mask active = true) const override;
+    virtual Color3f eval_attribute_3(const std::string& name,
+                                     const SurfaceInteraction3f &si,
+                                     Mask active = true) const override;
 
     /** \brief Ray-triangle intersection test
      *
@@ -270,8 +278,11 @@ protected:
         DynamicBuffer<Float> buf;
     };
 
-    template<uint32_t Size>
-    auto interpolate_attribute(MeshAttributeType type, const DynamicBuffer<Float> &buf, const SurfaceInteraction3f& si, Mask active) const {
+    template <uint32_t Size>
+    auto interpolate_attribute(MeshAttributeType type,
+                               const DynamicBuffer<Float> &buf,
+                               const SurfaceInteraction3f &si,
+                               Mask active) const {
         using StorageType = std::conditional_t<Size == 1, Float, Color3f>;
 
         if (type == MeshAttributeType::VERTEX) {
