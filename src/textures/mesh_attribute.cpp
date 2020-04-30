@@ -6,7 +6,25 @@
 NAMESPACE_BEGIN(mitsuba)
 
 /**!
-TODO: add description
+
+.. _texture-meshattribute:
+
+Mesh attribute texture (:monosp:`meshattribute`)
+------------------------------------------------
+
+.. pluginparameters::
+
+ * - name
+   - |string|
+   - Name of the attribute to evaluate. It should always start with ``"vertex_"`` or ``"face_"``.
+ * - scale
+   - |float|
+   - Scaling factor applied to the interpolated attribute value during evalutation.
+     (Default: 1.0)
+
+This plugin provides a simple mechanism to expose Mesh attributes (e.g. vertex color)
+as a texture.
+
  */
 
 template <typename Float, typename Spectrum>

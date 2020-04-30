@@ -245,14 +245,66 @@ public:
      */
     virtual std::pair<Vector3f, Vector3f> normal_derivative(const SurfaceInteraction3f &si,
                                                             bool shading_frame = true,
-                                                            Mask active        = true) const;
+                                                            Mask active = true) const;
 
+    /**
+     * \brief Evaluate a specific shape attribute at the given surface interaction
+     *
+     * \param name
+     *     Name of the attribute to evaluate
+     *
+     * \param si
+     *     Surface interaction associated with the query
+     *
+     * \return
+     *     An unpolarized spectral power distribution or reflectance value
+     *
+     * The default implementation throws an exception.
+     */
     virtual UnpolarizedSpectrum eval_attribute(const std::string &name,
                                                const SurfaceInteraction3f &si,
                                                Mask active = true) const;
+
+    /**
+     * \brief Monochromatic evaluation of a shape attribute at the given surface interaction
+     *
+     * This function differs from \ref eval_attribute() in that it provided raw access to
+     * scalar intensity/reflectance values without any color processing (e.g.
+     * spectral upsampling).
+     *
+     * \param name
+     *     Name of the attribute to evaluate
+     *
+     * \param si
+     *     Surface interaction associated with the query
+     *
+     * \return
+     *     An scalar intensity or reflectance value
+     *
+     * The default implementation throws an exception.
+     */
     virtual Float eval_attribute_1(const std::string &name,
                                    const SurfaceInteraction3f &si,
                                    Mask active = true) const;
+
+    /**
+     * \brief Trichromatic evaluation of a shape attribute at the given surface interaction
+     *
+     * This function differs from \ref eval_attribute() in that it provided raw access to
+     * RGB intensity/reflectance values without any additional color processing
+     * (e.g. RGB-to-spectral upsampling).
+     *
+     * \param name
+     *     Name of the attribute to evaluate
+     *
+     * \param si
+     *     Surface interaction associated with the query
+     *
+     * \return
+     *     An trichromatic intensity or reflectance value
+     *
+     * The default implementation throws an exception.
+     */
     virtual Color3f eval_attribute_3(const std::string &name,
                                      const SurfaceInteraction3f &si,
                                      Mask active = true) const;
