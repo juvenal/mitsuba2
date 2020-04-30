@@ -68,6 +68,14 @@ public:
     /// Const variant of \ref faces_buffer.
     const DynamicBuffer<UInt32>& faces_buffer() const { return m_faces_buf; }
 
+    /// Return the mesh attribute associated with \c name
+    MTS_INLINE DynamicBuffer<Float>& attribute_buffer(const std::string& name) {
+        auto attribute = m_mesh_attributes.find(name);
+        if (attribute == m_mesh_attributes.end())
+            Throw("Invalid attribute requested %s.", name.c_str());
+        return attribute->second.buf;
+    }
+
     /// Returns the face indices associated with triangle \c index
     template <typename Index>
     MTS_INLINE auto face_indices(Index index, mask_t<Index> active = true) const {
@@ -157,45 +165,9 @@ public:
     normal_derivative(const SurfaceInteraction3f &si,
                       bool shading_frame = true, Mask active = true) const override;
     
-    virtual UnpolarizedSpectrum eval_attribute(const std::string& name, const SurfaceInteraction3f &si, Mask active = true) const override {
-        const auto& attribute = m_mesh_attributes.find(name);
-        if (attribute == m_mesh_attributes.end())
-            Throw("Invalid attribute requested %s.", name.c_str());
-
-        if (attribute->second.size == 1)
-            return interpolate_attribute<1>(attribute->second.type, attribute->second.buf, si, active);
-        else if (attribute->second.size == 3) {
-            auto result = interpolate_attribute<3>(attribute->second.type, attribute->second.buf, si, active);
-            
-            if constexpr (is_monochromatic_v<Spectrum>)
-                return luminance(result);
-            else
-                return result;
-        } else
-            Throw("eval_attribute(): Attribute \"%s\" requested but had size %u.", name, attribute->second.size);
-    }
-
-    virtual Float eval_attribute_1(const std::string& name, const SurfaceInteraction3f &si, Mask active = true) const override {
-        const auto& attribute = m_mesh_attributes.find(name);
-        if (attribute == m_mesh_attributes.end())
-            Throw("Invalid attribute requested %s.", name.c_str());
-
-        if (attribute->second.size == 1)
-            return interpolate_attribute<1>(attribute->second.type, attribute->second.buf, si, active);
-        else
-            Throw("eval_attribute_1(): Attribute \"%s\" requested but had size %u.", name, attribute->second.size);
-    }
-
-    virtual Color3f eval_attribute_3(const std::string& name, const SurfaceInteraction3f &si, Mask active = true) const override {
-        const auto& attribute = m_mesh_attributes.find(name);
-        if (attribute == m_mesh_attributes.end())
-            Throw("Invalid attribute requested %s.", name.c_str());
-
-        else if (attribute->second.size == 3) {
-            return interpolate_attribute<3>(attribute->second.type, attribute->second.buf, si, active);
-        } else
-            Throw("eval_attribute_3(): Attribute \"%s\" requested but had size %u.", name, attribute->second.size);
-    }
+    virtual UnpolarizedSpectrum eval_attribute  (const std::string& name, const SurfaceInteraction3f &si, Mask active = true) const override;
+    virtual Float               eval_attribute_1(const std::string& name, const SurfaceInteraction3f &si, Mask active = true) const override;
+    virtual Color3f             eval_attribute_3(const std::string& name, const SurfaceInteraction3f &si, Mask active = true) const override;
 
     /** \brief Ray-triangle intersection test
      *
@@ -263,6 +235,9 @@ public:
 
     /// Return a human-readable string representation of the shape contents.
     virtual std::string to_string() const override;
+
+    size_t vertex_data_bytes() const;
+    size_t face_data_bytes() const;
 
 protected:
     Mesh(const Properties &);

@@ -186,7 +186,7 @@ public:
 
                 for (auto& descr: vertex_attributes_descriptors) {
                     auto[it, success] = m_mesh_attributes.insert({
-                        descr.name, { descr.size, Mesh<Float, Spectrum>::MeshAttributeType::VERTEX, empty<FloatStorage>(m_vertex_count * descr.size)}
+                        descr.name, { descr.size, Mesh<Float, Spectrum>::VERTEX, empty<FloatStorage>(m_vertex_count * descr.size)}
                     });
                     it->second.buf.managed();
                     descr.buf_ptr = it->second.buf.data();
@@ -213,7 +213,6 @@ public:
                     uint8_t *target = (uint8_t *) buf_o.get();
                     size_t psize = (i != packet_count) ? i_packet_size : i_remainder_size;
                     size_t count = (i != packet_count) ? elements_per_packet : remainder_count;
-
                     stream->read(buf.get(), psize);
                     if (unlikely(!conv->convert(count, buf.get(), buf_o.get())))
                         fail("incompatible contents -- is this a triangle mesh?");
@@ -288,7 +287,7 @@ public:
 
                 for (auto& descr: face_attributes_descriptors) {
                     auto[it, success] = m_mesh_attributes.insert({
-                        descr.name, { descr.size, Mesh<Float, Spectrum>::MeshAttributeType::FACE, empty<FloatStorage>(m_face_count * descr.size)}
+                        descr.name, { descr.size, Mesh<Float, Spectrum>::FACE, empty<FloatStorage>(m_face_count * descr.size)}
                     });
                     it->second.buf.managed();
                     descr.buf_ptr = it->second.buf.data();

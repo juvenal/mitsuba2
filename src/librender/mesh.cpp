@@ -244,11 +244,14 @@ MTS_VARIANT Mesh<Float, Spectrum>::Mesh(
     m_vertex_normals_buf = FloatStorage::copy(tmp_normals.data(), m_vertex_count * 3);
     if (has_uvs)
         m_vertex_texcoords_buf = FloatStorage::copy(tmp_uvs.data(), m_vertex_count * 2);
+    if (has_cols)
+        m_mesh_attributes["vertex_color"] = { 3, VERTEX, FloatStorage::copy(tmp_cols.data(), m_vertex_count * 3) };
 
     m_faces_buf.managed();
     m_vertex_positions_buf.managed();
     m_vertex_normals_buf.managed();
     m_vertex_texcoords_buf.managed();
+    m_mesh_attributes["vertex_color"].buf.managed();
 }
 
 MTS_VARIANT Mesh<Float, Spectrum>::~Mesh() { }
@@ -282,6 +285,16 @@ MTS_VARIANT void Mesh<Float, Spectrum>::write_ply(Stream *stream) const {
     if (fs)
         stream_name = fs->path().filename().string();
 
+    std::vector<std::pair<std::string, const MeshAttribute&>> vertex_attributes;
+    std::vector<std::pair<std::string, const MeshAttribute&>> face_attributes;
+
+    for (const auto&[name, attribute]: m_mesh_attributes) {
+        switch (attribute.type) {
+            case VERTEX: vertex_attributes.push_back({ name.substr(7), attribute }); break;
+            case FACE:   face_attributes.push_back({ name.substr(5), attribute }); break;
+        }
+    }
+
     Log(Info, "Writing mesh to \"%s\" ..", stream_name);
 
     Timer timer;
@@ -307,14 +320,27 @@ MTS_VARIANT void Mesh<Float, Spectrum>::write_ply(Stream *stream) const {
         stream->write_line("property float v");
     }
 
+    for (const auto&[name, attribute]: vertex_attributes)
+        for (size_t i = 0; i < attribute.size; ++i)
+            stream->write_line(tfm::format("property float %s_%zu", name.c_str(), i));
+
     stream->write_line(tfm::format("element face %i", m_face_count));
     stream->write_line("property list uchar int vertex_indices");
+
+    for (const auto&[name, attribute]: face_attributes)
+        for (size_t i = 0; i < attribute.size; ++i)
+            stream->write_line(tfm::format("property float %s_%zu", name.c_str(), i));
+
     stream->write_line("end_header");
 
     // Write vertices data
     const InputFloat* position_ptr = m_vertex_positions_buf.data();
     const InputFloat* normal_ptr   = m_vertex_normals_buf.data();
     const InputFloat* texcoord_ptr = m_vertex_texcoords_buf.data();
+
+    std::vector<const InputFloat*> vertex_attributes_ptr;
+    for (const auto&[name, attribute]: vertex_attributes)
+        vertex_attributes_ptr.push_back(attribute.buf.data());
 
     for (size_t i = 0; i < m_vertex_count; i++) {
         // Write positions
@@ -330,24 +356,41 @@ MTS_VARIANT void Mesh<Float, Spectrum>::write_ply(Stream *stream) const {
             stream->write(texcoord_ptr, 2 * sizeof(InputFloat));
             texcoord_ptr += 2;
         }
+
+        for (size_t i = 0; i < vertex_attributes_ptr.size(); ++i) {
+            const auto&[name, attribute] = vertex_attributes[i];
+            stream->write(vertex_attributes_ptr[i], attribute.size * sizeof(InputFloat));
+            vertex_attributes_ptr[i] += attribute.size;
+        }
     }
 
-    // Write faces data
-    stream->write(
-        m_faces_buf.data(),
-        3 * sizeof(ScalarIndex) * m_face_count
-    );
+    const ScalarIndex* face_ptr = m_faces_buf.data();
 
-    size_t vertex_data_bytes = 3 * sizeof(InputFloat);
-    if (has_vertex_normals())
-        vertex_data_bytes += 3 * sizeof(InputFloat);
-    if (has_vertex_texcoords())
-        vertex_data_bytes += 2 * sizeof(InputFloat);
+    std::vector<const InputFloat*> face_attributes_ptr;
+    for (const auto&[name, attribute]: face_attributes)
+        face_attributes_ptr.push_back(attribute.buf.data());
+
+    // Write faces data
+    uint8_t vertex_indices_count = 3;
+    for (size_t i = 0; i < m_face_count; i++) {
+        // Write vertex count
+        stream->write(&vertex_indices_count, sizeof(uint8_t));
+
+        // Write positions
+        stream->write(face_ptr, 3 * sizeof(ScalarIndex));
+        face_ptr += 3;
+
+        for (size_t i = 0; i < face_attributes_ptr.size(); ++i) {
+            const auto&[name, attribute] = face_attributes[i];
+            stream->write(face_attributes_ptr[i], attribute.size * sizeof(InputFloat));
+            face_attributes_ptr[i] += attribute.size;
+        }
+    }
 
     Log(Info, "\"%s\": wrote %i faces, %i vertices (%s in %s)",
         m_name, m_face_count, m_vertex_count,
-        util::mem_string(m_face_count * 3 * sizeof(ScalarIndex) +
-                            m_vertex_count * vertex_data_bytes),
+        util::mem_string(m_face_count * face_data_bytes() +
+                            m_vertex_count * vertex_data_bytes()),
         util::time_string(timer.value())
     );
 }
@@ -651,6 +694,50 @@ Mesh<Float, Spectrum>::normal_derivative(const SurfaceInteraction3f &si, bool sh
     return { dndu, dndv };
 }
 
+MTS_VARIANT typename Mesh<Float, Spectrum>::UnpolarizedSpectrum
+Mesh<Float, Spectrum>::eval_attribute(const std::string& name, const SurfaceInteraction3f &si, Mask active) const {
+    const auto& attribute = m_mesh_attributes.find(name);
+    if (attribute == m_mesh_attributes.end())
+        Throw("Invalid attribute requested %s.", name.c_str());
+
+    if (attribute->second.size == 1)
+        return interpolate_attribute<1>(attribute->second.type, attribute->second.buf, si, active);
+    else if (attribute->second.size == 3) {
+        auto result = interpolate_attribute<3>(attribute->second.type, attribute->second.buf, si, active);
+        
+        if constexpr (is_monochromatic_v<Spectrum>)
+            return luminance(result);
+        else
+            return result;
+    } else {
+        Throw("eval_attribute(): Attribute \"%s\" requested but had size %u.", name, attribute->second.size);
+    }
+}
+
+MTS_VARIANT Float
+Mesh<Float, Spectrum>::eval_attribute_1(const std::string& name, const SurfaceInteraction3f &si, Mask active) const {
+    const auto& attribute = m_mesh_attributes.find(name);
+    if (attribute == m_mesh_attributes.end())
+        Throw("Invalid attribute requested %s.", name.c_str());
+
+    if (attribute->second.size == 1)
+        return interpolate_attribute<1>(attribute->second.type, attribute->second.buf, si, active);
+    else
+        Throw("eval_attribute_1(): Attribute \"%s\" requested but had size %u.", name, attribute->second.size);
+}
+
+MTS_VARIANT typename Mesh<Float, Spectrum>::Color3f
+Mesh<Float, Spectrum>::eval_attribute_3(const std::string& name, const SurfaceInteraction3f &si, Mask active) const {
+    const auto& attribute = m_mesh_attributes.find(name);
+    if (attribute == m_mesh_attributes.end())
+        Throw("Invalid attribute requested %s.", name.c_str());
+
+    else if (attribute->second.size == 3) {
+        return interpolate_attribute<3>(attribute->second.type, attribute->second.buf, si, active);
+    } else
+        Throw("eval_attribute_3(): Attribute \"%s\" requested but had size %u.", name, attribute->second.size);
+}
+
 namespace {
 constexpr size_t max_vertices = 10;
 
@@ -753,26 +840,43 @@ Mesh<Float, Spectrum>::bbox(ScalarIndex index, const ScalarBoundingBox3f &clip) 
 }
 
 MTS_VARIANT std::string Mesh<Float, Spectrum>::to_string() const {
-    size_t vertex_data_bytes = 3 * sizeof(ScalarFloat);
-    if (has_vertex_normals())
-        vertex_data_bytes += 3 * sizeof(ScalarFloat);
-    if (has_vertex_texcoords())
-        vertex_data_bytes += 2 * sizeof(ScalarFloat);
-
-    size_t face_data_bytes = 3 * sizeof(ScalarIndex);
-
     std::ostringstream oss;
     oss << class_()->name() << "[" << std::endl
         << "  name = \"" << m_name << "\"," << std::endl
         << "  bbox = " << string::indent(m_bbox) << "," << std::endl
         << "  vertex_count = " << m_vertex_count << "," << std::endl
-        << "  vertices = [" << util::mem_string(vertex_data_bytes * m_vertex_count) << " of vertex data]," << std::endl
+        << "  vertices = [" << util::mem_string(vertex_data_bytes() * m_vertex_count) << " of vertex data]," << std::endl
         << "  face_count = " << m_face_count << "," << std::endl
-        << "  faces = [" << util::mem_string(face_data_bytes * m_face_count) << " of face data]," << std::endl
+        << "  faces = [" << util::mem_string(face_data_bytes() * m_face_count) << " of face data]," << std::endl
         << "  disable_vertex_normals = " << m_disable_vertex_normals << "," << std::endl
         << "  surface_area = " << m_area_distr.sum() << std::endl
         << "]";
     return oss.str();
+}
+
+MTS_VARIANT size_t Mesh<Float, Spectrum>::vertex_data_bytes() const {
+    size_t vertex_data_bytes = 3 * sizeof(InputFloat);
+
+    if (has_vertex_normals())
+        vertex_data_bytes += 3 * sizeof(InputFloat);
+    if (has_vertex_texcoords())
+        vertex_data_bytes += 2 * sizeof(InputFloat);
+    
+    for (const auto&[name, attribute]: m_mesh_attributes)
+        if (attribute.type == VERTEX)
+            vertex_data_bytes += attribute.size * sizeof(InputFloat);
+
+    return vertex_data_bytes;
+}
+
+MTS_VARIANT size_t Mesh<Float, Spectrum>::face_data_bytes() const {
+    size_t face_data_bytes = 3 * sizeof(ScalarIndex);
+
+    for (const auto&[name, attribute]: m_mesh_attributes)
+        if (attribute.type == FACE)
+            face_data_bytes += attribute.size * sizeof(InputFloat);
+    
+    return face_data_bytes;
 }
 
 #if defined(MTS_ENABLE_EMBREE)
@@ -842,6 +946,8 @@ MTS_VARIANT void Mesh<Float, Spectrum>::traverse(TraversalCallback *callback) {
     callback->put_parameter("vertex_positions_buf", m_vertex_positions_buf);
     callback->put_parameter("vertex_normals_buf",   m_vertex_normals_buf);
     callback->put_parameter("vertex_texcoords_buf", m_vertex_texcoords_buf);
+    for(auto&[name, attribute]: m_mesh_attributes)
+        callback->put_parameter(tfm::format("%s_buf", name.c_str()), attribute.buf);
 }
 
 MTS_IMPLEMENT_CLASS_VARIANT(Mesh, Shape)

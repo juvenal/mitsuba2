@@ -9,10 +9,6 @@ NAMESPACE_BEGIN(mitsuba)
 TODO: add description
  */
 
-// Forward declaration of specialized bitmap texture
-template <typename Float, typename Spectrum, uint32_t Size, bool Vertex>
-class MeshAttributeImpl;
-
 template <typename Float, typename Spectrum>
 class MeshAttribute final : public Texture<Float, Spectrum> {
 public:

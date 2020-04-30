@@ -74,6 +74,8 @@ MTS_PY_EXPORT(Shape) {
         .def("faces_buffer",
              py::overload_cast<>(&Mesh::faces_buffer),
              /*D(Mesh, faces_buffer),*/ py::return_value_policy::reference_internal)
+        .def("attribute_buffer", &Mesh::attribute_buffer, "name"_a,
+             /*D(Mesh, attribute_buffer),*/ py::return_value_policy::reference_internal)
         .def("ray_intersect_triangle", vectorize(&Mesh::ray_intersect_triangle),
              "index"_a, "ray"_a, "active"_a = true, D(Mesh, ray_intersect_triangle));
 }
