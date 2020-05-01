@@ -281,11 +281,8 @@ Mesh<Float, Spectrum>::bbox(ScalarIndex index) const {
                                                                max(max(v0, v1), v2));
 }
 
-MTS_VARIANT void Mesh<Float, Spectrum>::write_ply(Stream *stream) const {
-    std::string stream_name = "<stream>";
-    auto fs = dynamic_cast<FileStream *>(stream);
-    if (fs)
-        stream_name = fs->path().filename().string();
+MTS_VARIANT void Mesh<Float, Spectrum>::write_ply(const std::string &filename) const {
+    ref<FileStream> stream = new FileStream(filename, FileStream::ETruncReadWrite);
 
     std::vector<std::pair<std::string, const MeshAttribute&>> vertex_attributes;
     std::vector<std::pair<std::string, const MeshAttribute&>> face_attributes;
@@ -297,7 +294,7 @@ MTS_VARIANT void Mesh<Float, Spectrum>::write_ply(Stream *stream) const {
         }
     }
 
-    Log(Info, "Writing mesh to \"%s\" ..", stream_name);
+    Log(Info, "Writing mesh to \"%s\" ..", filename);
 
     Timer timer;
     stream->write_line("ply");

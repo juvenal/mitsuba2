@@ -126,7 +126,7 @@ public:
     // =========================================================================
 
     /// Export mesh as a binary PLY file
-    void write_ply(Stream *stream) const;
+    void write_ply(const std::string &filename) const;
 
     /// Compute smooth vertex normals and replace the current normal values
     void recompute_vertex_normals();

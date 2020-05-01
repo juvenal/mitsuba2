@@ -61,7 +61,7 @@ MTS_PY_EXPORT(Shape) {
         .def_method(Mesh, has_vertex_texcoords)
         .def_method(Mesh, recompute_vertex_normals)
         .def_method(Mesh, recompute_bbox)
-        .def("write_ply", &Mesh::write_ply, "stream"_a, "Export mesh as a binary PLY file")
+        .def("write_ply", &Mesh::write_ply, "filename"_a, "Export mesh as a binary PLY file")
         .def("vertex_positions_buffer",
              py::overload_cast<>(&Mesh::vertex_positions_buffer),
              D(Mesh, vertex_positions_buffer), py::return_value_policy::reference_internal)
